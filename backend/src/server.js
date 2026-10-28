@@ -53,9 +53,12 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/forum', forumRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Production Static Serving
-if (process.env.NODE_ENV === 'production') {
-  const frontendBuildPath = path.resolve(__dirname, '../../frontend/dist');
+// Integrated Frontend & Backend Static Serving (Single Unified Link)
+const fs = require('fs');
+const frontendBuildPath = path.resolve(__dirname, '../../frontend/dist');
+
+if (fs.existsSync(frontendBuildPath)) {
+  console.log(`[Unified Full-Stack] Serving integrated React frontend from ${frontendBuildPath}`);
   app.use(express.static(frontendBuildPath));
 
   app.get('*', (req, res) => {
@@ -66,7 +69,8 @@ if (process.env.NODE_ENV === 'production') {
     res.json({
       message: 'Agri-Tech API server is active',
       health: '/api/health',
-      docs: {
+      note: 'Run npm run build to integrate and serve React frontend directly from this unified link',
+      endpoints: {
         auth: '/api/auth',
         farms: '/api/farms',
         crops: '/api/crops',

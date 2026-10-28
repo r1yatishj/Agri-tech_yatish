@@ -2,11 +2,26 @@
 
 > **Precision Farming, IoT Soil NPK Telemetry, Automated Microclimate Pest Forecasting, Kisan Marketplace, and Agronomic Advisory Platform**
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Single%20Unified%20Link-success?style=for-the-badge&logo=render&logoColor=white)](https://agri-tech-yatish.onrender.com)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/r1yatishj/Agri-tech_yatish)
+
 [![React](https://img.shields.io/badge/Frontend-React%2018%20(Vite)-61DAFB?logo=react&logoColor=black)](https://reactjs.org/)
 [![Node.js](https://img.shields.io/badge/Backend-Node.js%20%7C%20Express-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![MongoDB](https://img.shields.io/badge/Database-MongoDB%20(Mongoose)-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![TailwindCSS](https://img.shields.io/badge/Styling-Tailwind%20CSS-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+---
+
+## 🔗 Integrated Live Demo & Deployment
+
+| Resource | Single Unified URL |
+|---|---|
+| **🌐 Live Application (Frontend + Backend + DB)** | [https://agri-tech-yatish.onrender.com](https://agri-tech-yatish.onrender.com) *(or [Vercel Alternative](https://agri-tech-yatish.vercel.app))* |
+| **📁 Source Code Repository** | [https://github.com/r1yatishj/Agri-tech_yatish](https://github.com/r1yatishj/Agri-tech_yatish) |
+| **⚡ Integrated API Health Check** | [https://agri-tech-yatish.onrender.com/api/health](https://agri-tech-yatish.onrender.com/api/health) |
+
+> **Unified Full-Stack Architecture:** The React frontend SPA, Node.js/Express REST API, and MongoDB Database are completely unified into **one single domain/link**. The server serves the pre-compiled client bundle at `/` while hosting all RESTful agronomic endpoints under `/api/*`, completely eliminating CORS friction and multi-link complexity.
 
 ---
 

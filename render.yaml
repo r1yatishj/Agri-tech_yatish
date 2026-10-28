@@ -1,29 +1,18 @@
 services:
-  # Backend Web Service
+  # Unified Full-Stack MERN Web Service (Single Live Demo Link)
+  # Combines React Frontend, Node/Express Backend & MongoDB into one unified URL
   - type: web
-    name: agri-tech-backend
+    name: agri-tech-yatish
     env: node
     plan: free
-    buildCommand: npm install --prefix backend
-    startCommand: npm start --prefix backend
+    buildCommand: npm install && npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend
+    startCommand: node backend/src/server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 5000
+        value: 10000
       - key: MONGO_URI
         sync: false
       - key: JWT_SECRET
         generateValue: true
-
-  # Frontend Static Site
-  - type: static
-    name: agri-tech-frontend
-    buildCommand: npm install --prefix frontend && npm run build --prefix frontend
-    staticPublishPath: frontend/dist
-    envVars:
-      - key: VITE_API_URL
-        fromService:
-          type: web
-          name: agri-tech-backend
-          property: host
