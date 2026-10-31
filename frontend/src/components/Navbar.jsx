@@ -1,270 +1,213 @@
 import React, { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { useCart } from '../context/CartContext';
 import {
   Sprout,
   LayoutDashboard,
   Trees,
-  Wheat,
-  Activity,
-  CloudSun,
+  FlaskConical,
+  CloudSunRain,
   ShoppingBag,
-  MessageSquare,
+  MessageSquareText,
+  Stethoscope,
   ShieldAlert,
   LogOut,
-  User,
   Globe,
-  Menu,
-  X,
-  ShoppingCart,
-  ChevronDown,
+  User,
+  ShoppingCart
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { useLanguage } from '../context/LanguageContext';
 
-const Navbar = ({ onOpenCart }) => {
-  const { user, isAuthenticated, isAdmin, logout, demoLogin, cartCount } = useAuth();
-  const { lang, changeLanguage, t, availableLangs } = useLanguage();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [langMenuOpen, setLangMenuOpen] = useState(false);
-  const location = useLocation();
+const Navbar = () => {
+  const { user, logout, isAuthenticated, login } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
+  const { getCartCount } = useCart();
   const navigate = useNavigate();
+  const [langOpen, setLangOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const handleDemoLogin = async (role) => {
+    try {
+      if (role === 'farmer') {
+        await login('farmer@agritech.com', 'password123');
+      } else {
+        await login('admin@agritech.com', 'admin123');
+      }
+      navigate('/dashboard');
+    } catch (err) {
+      alert('Demo login failed: ' + (err.response?.data?.message || err.message));
+    }
+  };
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
-  };
-
-  const navLinks = [
-    { to: '/', label: t('navHome'), icon: Sprout, public: true },
-    { to: '/dashboard', label: t('navDashboard'), icon: LayoutDashboard, authRequired: true },
-    { to: '/farms', label: t('navFarms'), icon: Trees, authRequired: true },
-    { to: '/crops', label: t('navCrops'), icon: Wheat, authRequired: true },
-    { to: '/soil-analytics', label: t('navSoil'), icon: Activity, authRequired: true },
-    { to: '/weather', label: t('navWeather'), icon: CloudSun, authRequired: true },
-    { to: '/marketplace', label: t('navMarketplace'), icon: ShoppingBag, public: true },
-    { to: '/forum', label: t('navForum'), icon: MessageSquare, public: true },
-  ];
-
-  if (isAdmin) {
-    navLinks.push({ to: '/admin', label: t('navAdmin'), icon: ShieldAlert, adminOnly: true });
-  }
-
-  const isActive = (path) => {
-    if (path === '/' && location.pathname !== '/') return false;
-    return location.pathname.startsWith(path);
+    navigate('/register');
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-sm transition-all">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Brand Logo */}
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-green-700 flex items-center justify-center text-white shadow-md shadow-emerald-200 group-hover:scale-105 transition-transform">
-              <Sprout className="w-6 h-6 stroke-[2.5]" />
-            </div>
-            <div>
-              <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-emerald-800 to-green-600 bg-clip-text text-transparent">
-                Agri-Tech
-              </span>
-              <span className="hidden sm:inline-block ml-1.5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
-                MERN Smart
-              </span>
-            </div>
-          </Link>
+    <nav className="navbar navbar-expand-lg agri-navbar sticky-top py-2">
+      <div className="container-fluid px-lg-4">
+        {/* Brand */}
+        <Link to="/" className="navbar-brand agri-brand d-flex align-items-center">
+          <div className="bg-success text-white p-2 rounded-circle d-flex align-items-center justify-content-center shadow-sm" style={{ width: '38px', height: '38px' }}>
+            <Sprout size={22} />
+          </div>
+          <div>
+            <span className="fw-bold fs-5 text-success">{t('appName')}</span>
+            <small className="d-block text-muted" style={{ fontSize: '0.68rem', fontWeight: 500, lineHeight: 1 }}>{t('tagline')}</small>
+          </div>
+        </Link>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center space-x-1">
-            {navLinks.map((link) => {
-              if (link.authRequired && !isAuthenticated) return null;
-              const Icon = link.icon;
-              const active = isActive(link.to);
-              return (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    active
-                      ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200/60 shadow-xs'
-                      : 'text-slate-600 hover:text-emerald-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${active ? 'text-emerald-600' : 'text-slate-400'}`} />
-                  {link.label}
-                </Link>
-              );
-            })}
-          </nav>
+        {/* Mobile toggle */}
+        <button
+          className="navbar-toggler border-0"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#navbarContent"
+          aria-controls="navbarContent"
+          aria-expanded="false"
+          aria-label="Toggle navigation"
+        >
+          <span className="navbar-toggler-icon"></span>
+        </button>
 
-          {/* Right Action Icons: Language, Cart, Profile / Auth */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Language Selector Dropdown */}
-            <div className="relative">
+        {/* Nav Items */}
+        <div className="collapse navbar-collapse" id="navbarContent">
+          {isAuthenticated ? (
+            <ul className="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3 gap-1">
+              <li className="nav-item">
+                <NavLink to="/dashboard" className="nav-link d-flex align-items-center gap-1">
+                  <LayoutDashboard size={18} /> {t('navDashboard')}
+                </NavLink>
+              </li>
+              <li className="nav-item">
+                <NavLink to="/farms" className="nav-link d-flex align-items-center gap-1">
+                  <Trees size={18} /> {t('navFarms')}
+                </NavLink>
+              </li>
+              <li className="nav-item">
+                <NavLink to="/soil" className="nav-link d-flex align-items-center gap-1">
+                  <FlaskConical size={18} /> {t('navSoil')}
+                </NavLink>
+              </li>
+              <li className="nav-item">
+                <NavLink to="/weather" className="nav-link d-flex align-items-center gap-1">
+                  <CloudSunRain size={18} /> {t('navWeather')}
+                </NavLink>
+              </li>
+              <li className="nav-item">
+                <NavLink to="/marketplace" className="nav-link d-flex align-items-center gap-1">
+                  <ShoppingBag size={18} /> {t('navMarketplace')}
+                </NavLink>
+              </li>
+              <li className="nav-item">
+                <NavLink to="/community" className="nav-link d-flex align-items-center gap-1">
+                  <MessageSquareText size={18} /> {t('navForum')}
+                </NavLink>
+              </li>
+              <li className="nav-item">
+                <NavLink to="/consultation" className="nav-link d-flex align-items-center gap-1">
+                  <Stethoscope size={18} /> {t('navConsult')}
+                </NavLink>
+              </li>
+              {user?.role === 'admin' && (
+                <li className="nav-item">
+                  <NavLink to="/admin" className="nav-link d-flex align-items-center gap-1 text-danger fw-semibold">
+                    <ShieldAlert size={18} /> {t('navAdmin')}
+                  </NavLink>
+                </li>
+              )}
+            </ul>
+          ) : (
+            <ul className="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3">
+              <li className="nav-item">
+                <span className="text-muted small fst-italic">MERN Smart Agriculture Platform</span>
+              </li>
+            </ul>
+          )}
+
+          {/* Right utility buttons: Language, Cart, Profile */}
+          <div className="d-flex align-items-center gap-2 mt-2 mt-lg-0">
+            {/* Language Switcher */}
+            <div className="dropdown position-relative">
               <button
+                className="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-1"
                 type="button"
-                onClick={() => setLangMenuOpen(!langMenuOpen)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors"
-                title="Change Language"
+                onClick={() => setLangOpen(!langOpen)}
+                aria-expanded={langOpen}
               >
-                <Globe className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="uppercase font-semibold">{lang}</span>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
+                <Globe size={15} />
+                <span className="fw-medium">{language === 'hi' ? 'हिन्दी' : 'English'}</span>
               </button>
-
-              {langMenuOpen && (
-                <div
-                  className="absolute right-0 mt-2 w-32 bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-100"
-                  onMouseLeave={() => setLangMenuOpen(false)}
-                >
-                  {availableLangs.map((l) => (
-                    <button
-                      key={l.code}
-                      onClick={() => {
-                        changeLanguage(l.code);
-                        setLangMenuOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-emerald-50 ${
-                        lang === l.code ? 'text-emerald-700 font-bold bg-emerald-50/60' : 'text-slate-700'
-                      }`}
-                    >
-                      <span>{l.label}</span>
-                      {lang === l.code && <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <ul className={`dropdown-menu dropdown-menu-end shadow-sm ${langOpen ? 'show d-block' : ''}`} style={{ right: 0 }}>
+                <li>
+                  <button className={`dropdown-item ${language === 'en' ? 'active bg-success' : ''}`} onClick={() => { setLanguage('en'); setLangOpen(false); }}>
+                    🇬🇧 English
+                  </button>
+                </li>
+                <li>
+                  <button className={`dropdown-item ${language === 'hi' ? 'active bg-success' : ''}`} onClick={() => { setLanguage('hi'); setLangOpen(false); }}>
+                    🇮🇳 हिन्दी (Hindi)
+                  </button>
+                </li>
+              </ul>
             </div>
 
-            {/* Shopping Cart Button */}
-            <button
-              type="button"
-              onClick={onOpenCart}
-              className="relative p-2 rounded-lg text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
-              title="View Cart"
-            >
-              <ShoppingCart className="w-5 h-5" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center border-2 border-white animate-bounce">
-                  {cartCount}
-                </span>
-              )}
-            </button>
-
-            {/* Auth Actions */}
-            {isAuthenticated ? (
-              <div className="flex items-center gap-2">
-                <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200">
-                  <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
-                    {user?.name?.charAt(0) || 'U'}
-                  </div>
-                  <div className="text-left text-xs">
-                    <p className="font-semibold text-slate-800 leading-tight truncate max-w-[100px]">
-                      {user?.name?.split(' ')[0]}
-                    </p>
-                    <span
-                      className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-semibold uppercase ${
-                        isAdmin
-                          ? 'bg-purple-100 text-purple-700 border border-purple-200'
-                          : 'bg-green-100 text-green-700 border border-green-200'
-                      }`}
-                    >
-                      {isAdmin ? 'Admin' : 'Farmer'}
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="p-2 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors"
-                  title={t('logout')}
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <Link
-                  to="/login"
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 transition-colors"
-                >
-                  {t('login')}
-                </Link>
-                <Link
-                  to="/register"
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-200 transition-all"
-                >
-                  {t('register')}
-                </Link>
-              </div>
+            {/* Cart Link */}
+            {isAuthenticated && (
+              <Link to="/marketplace?view=cart" className="btn btn-sm btn-outline-success position-relative d-flex align-items-center p-2">
+                <ShoppingCart size={18} />
+                {getCartCount() > 0 && (
+                  <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                    {getCartCount()}
+                  </span>
+                )}
+              </Link>
             )}
 
-            {/* Mobile Menu Toggle Button */}
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
-              aria-label="Toggle Navigation Menu"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+            {/* User Profile / Quick Login */}
+            {isAuthenticated ? (
+              <div className="dropdown position-relative">
+                <button
+                  className="btn btn-sm btn-light border dropdown-toggle d-flex align-items-center gap-2 py-1 px-2"
+                  type="button"
+                  onClick={() => setProfileOpen(!profileOpen)}
+                  aria-expanded={profileOpen}
+                >
+                  <img src={user.avatar || 'https://via.placeholder.com/32'} alt="User" className="rounded-circle" width="26" height="26" />
+                  <span className="fw-semibold small d-none d-md-inline">{user.name.split(' ')[0]}</span>
+                  <span className={`badge ${user.role === 'admin' ? 'bg-danger' : 'bg-success'} text-white`} style={{ fontSize: '0.65rem' }}>
+                    {user.role}
+                  </span>
+                </button>
+                <ul className={`dropdown-menu dropdown-menu-end shadow-sm ${profileOpen ? 'show d-block' : ''}`} style={{ right: 0 }}>
+                  <li className="px-3 py-1">
+                    <small className="text-muted d-block">{user.email}</small>
+                    <small className="fw-bold text-dark">{user.location?.district ? `${user.location.district}, ${user.location.state}` : 'Kisan Member'}</small>
+                  </li>
+                  <li><hr className="dropdown-divider" /></li>
+                  <li>
+                    <button className="dropdown-item text-danger d-flex align-items-center gap-2" onClick={() => { setProfileOpen(false); handleLogout(); }}>
+                      <LogOut size={16} /> {t('logout')}
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            ) : (
+              <div className="d-flex align-items-center gap-2">
+                <button className="btn btn-sm btn-outline-success" onClick={() => handleDemoLogin('farmer')}>
+                  🌱 {t('demoFarmer')}
+                </button>
+                <button className="btn btn-sm btn-outline-danger" onClick={() => handleDemoLogin('admin')}>
+                  🔬 {t('demoAdmin')}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-2 animate-in slide-in-from-top-2">
-          {navLinks.map((link) => {
-            if (link.authRequired && !isAuthenticated) return null;
-            const Icon = link.icon;
-            const active = isActive(link.to);
-            return (
-              <Link
-                key={link.to}
-                to={link.to}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold ${
-                  active
-                    ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-200'
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${active ? 'text-emerald-600' : 'text-slate-400'}`} />
-                {link.label}
-              </Link>
-            );
-          })}
-
-          {!isAuthenticated && (
-            <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    demoLogin('farmer');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="flex-1 py-2 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200"
-                >
-                  Quick Farmer Demo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    demoLogin('admin');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="flex-1 py-2 text-xs font-medium bg-purple-50 text-purple-700 rounded-lg border border-purple-200"
-                >
-                  Quick Admin Demo
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </header>
+    </nav>
   );
 };
 

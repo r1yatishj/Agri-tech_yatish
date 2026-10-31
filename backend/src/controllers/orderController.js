@@ -1,95 +1,60 @@
 const mongoose = require('mongoose');
 const Order = require('../models/Order');
+const Product = require('../models/Product');
 const mockStore = require('../utils/mockStore');
 
 const isDBConnected = () => mongoose.connection.readyState === 1;
 
-const STAGES = [
-  'Order Placed',
-  'Confirmed & Packed',
-  'In Transit / Shipped',
-  'Out for Delivery',
-  'Delivered',
-];
-
-const generateTimeline = (currentStatus) => {
-  const stageMap = {
-    Placed: 0,
-    Confirmed: 1,
-    Shipped: 2,
-    'Out for Delivery': 3,
-    Delivered: 4,
-    Cancelled: -1,
-  };
-
-  const currentIdx = stageMap[currentStatus] !== undefined ? stageMap[currentStatus] : 0;
-
-  return STAGES.map((stage, idx) => ({
-    stage,
-    timestamp: idx <= currentIdx ? new Date() : null,
-    completed: idx <= currentIdx,
-    detail:
-      idx === 0
-        ? 'Order placed successfully by farmer'
-        : idx === 1
-        ? 'Seeds & supplies quality checked and dispatched'
-        : idx === 2
-        ? 'Consignment en route to local agricultural distribution hub'
-        : idx === 3
-        ? 'Field delivery agent dispatched for doorstep delivery'
-        : 'Delivered to farm / verified receipt',
-  }));
+const generateTimeline = (status) => {
+  const now = new Date();
+  const stages = [
+    { stage: 'Order Placed', completed: true, timestamp: now, detail: 'Order booked via Kisan Portal' },
+    { stage: 'Processing & Packed', completed: status !== 'Placed', timestamp: status !== 'Placed' ? now : null, detail: 'Warehouse preparation' },
+    { stage: 'Shipped / In Transit', completed: ['Shipped', 'Out for Delivery', 'Delivered'].includes(status), timestamp: ['Shipped', 'Out for Delivery', 'Delivered'].includes(status) ? now : null, detail: 'Dispatched to rural delivery hub' },
+    { stage: 'Out for Delivery', completed: ['Out for Delivery', 'Delivered'].includes(status), timestamp: ['Out for Delivery', 'Delivered'].includes(status) ? now : null, detail: 'Local delivery agent assigned' },
+    { stage: 'Delivered', completed: status === 'Delivered', timestamp: status === 'Delivered' ? now : null, detail: 'Handed over to farmer' },
+  ];
+  return stages;
 };
 
-// @desc    Create new marketplace order
+// @desc    Place a new marketplace order
 // @route   POST /api/orders
 // @access  Private
 exports.createOrder = async (req, res) => {
   try {
-    const { items, shippingAddress, paymentMethod } = req.body;
+    const { items, shippingAddress, paymentMethod, total } = req.body;
 
-    if (!items || !items.length) {
-      return res.status(400).json({ success: false, message: 'Cart cannot be empty' });
+    if (!items || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Your shopping cart is empty' });
     }
 
-    if (
-      !shippingAddress ||
-      !shippingAddress.street ||
-      !shippingAddress.villageOrCity ||
-      !shippingAddress.state ||
-      !shippingAddress.phone
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: 'Complete shipping address and contact number are required',
-      });
-    }
-
-    const totalAmount = items.reduce(
+    const calculatedTotal = Number(total) || items.reduce(
       (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
       0
     );
 
     const timeline = generateTimeline('Placed');
 
+    const address = {
+      fullName: shippingAddress?.recipientName || shippingAddress?.fullName || req.user.name,
+      street: shippingAddress?.village || shippingAddress?.street || 'Main Farm Road',
+      villageOrCity: shippingAddress?.district || shippingAddress?.villageOrCity || 'Kota',
+      state: shippingAddress?.state || 'Rajasthan',
+      pincode: shippingAddress?.pincode || '324001',
+      phone: shippingAddress?.phone || req.user.phone || '+91 98234 56789',
+    };
+
     if (isDBConnected()) {
       const order = await Order.create({
         farmerId: req.user._id,
         farmerName: req.user.name,
         items,
-        totalAmount,
+        totalAmount: calculatedTotal,
         status: 'Placed',
-        shippingAddress: {
-          fullName: shippingAddress.fullName || req.user.name,
-          street: shippingAddress.street,
-          villageOrCity: shippingAddress.villageOrCity,
-          state: shippingAddress.state,
-          pincode: shippingAddress.pincode || '302001',
-          phone: shippingAddress.phone || req.user.phone || '+91 99999 99999',
-        },
+        shippingAddress: address,
         trackingTimeline: timeline,
-        paymentMethod: paymentMethod || 'Kisan Credit Card / Cash On Delivery',
-        paymentStatus: 'COD Verified',
+        paymentMethod: paymentMethod || 'Cash on Delivery',
+        paymentStatus: 'Pending',
       });
 
       return res.status(201).json({
@@ -103,19 +68,12 @@ exports.createOrder = async (req, res) => {
         farmerId: req.user._id,
         farmerName: req.user.name,
         items,
-        totalAmount,
+        totalAmount: calculatedTotal,
         status: 'Placed',
-        shippingAddress: {
-          fullName: shippingAddress.fullName || req.user.name,
-          street: shippingAddress.street,
-          villageOrCity: shippingAddress.villageOrCity,
-          state: shippingAddress.state,
-          pincode: shippingAddress.pincode || '302001',
-          phone: shippingAddress.phone || req.user.phone || '+91 99999 99999',
-        },
+        shippingAddress: address,
         trackingTimeline: timeline,
-        paymentMethod: paymentMethod || 'Kisan Credit Card / Cash On Delivery',
-        paymentStatus: 'COD Verified',
+        paymentMethod: paymentMethod || 'Cash on Delivery',
+        paymentStatus: 'Pending',
         createdAt: new Date(),
       };
 
@@ -131,18 +89,23 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// @desc    Get orders for logged in farmer
-// @route   GET /api/orders/my
+// @desc    Get orders (returns all for admin, user orders for farmer)
+// @route   GET /api/orders
 // @access  Private
-exports.getMyOrders = async (req, res) => {
+exports.getOrders = async (req, res) => {
   try {
+    const isAdmin = req.user.role === 'admin';
+
     if (isDBConnected()) {
-      const orders = await Order.find({ farmerId: req.user._id }).sort({ createdAt: -1 });
+      const query = isAdmin ? {} : { farmerId: req.user._id };
+      const orders = await Order.find(query).sort({ createdAt: -1 });
       return res.json({ success: true, count: orders.length, data: orders });
     } else {
-      const orders = mockStore.orders.filter(
-        (o) => o.farmerId.toString() === req.user._id.toString()
-      );
+      const orders = isAdmin
+        ? mockStore.orders
+        : mockStore.orders.filter(
+            (o) => o.farmerId.toString() === req.user._id.toString()
+          );
       return res.json({ success: true, count: orders.length, data: orders });
     }
   } catch (error) {
@@ -160,20 +123,10 @@ exports.getOrderById = async (req, res) => {
     if (isDBConnected()) {
       const order = await Order.findById(id);
       if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
-
-      if (req.user.role !== 'admin' && order.farmerId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ success: false, message: 'Access denied to this order' });
-      }
-
       return res.json({ success: true, data: order });
     } else {
       const order = mockStore.orders.find((o) => o._id.toString() === id.toString());
       if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
-
-      if (req.user.role !== 'admin' && order.farmerId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ success: false, message: 'Access denied to this order' });
-      }
-
       return res.json({ success: true, data: order });
     }
   } catch (error) {
@@ -181,23 +134,7 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// @desc    Get all orders (Admin only)
-// @route   GET /api/orders
-// @access  Private / Admin
-exports.getAllOrders = async (req, res) => {
-  try {
-    if (isDBConnected()) {
-      const orders = await Order.find().sort({ createdAt: -1 });
-      return res.json({ success: true, count: orders.length, data: orders });
-    } else {
-      return res.json({ success: true, count: mockStore.orders.length, data: mockStore.orders });
-    }
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Update order status & tracking (Admin)
+// @desc    Update order dispatch status (Admin)
 // @route   PUT /api/orders/:id/status
 // @access  Private / Admin
 exports.updateOrderStatus = async (req, res) => {
@@ -205,33 +142,32 @@ exports.updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const allowed = ['Placed', 'Confirmed', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled'];
-    if (!allowed.includes(status)) {
-      return res.status(400).json({ success: false, message: 'Invalid status option' });
+    if (!status) {
+      return res.status(400).json({ success: false, message: 'Status is required' });
     }
 
-    const updatedTimeline = generateTimeline(status);
+    const timeline = generateTimeline(status);
 
     if (isDBConnected()) {
       const order = await Order.findById(id);
       if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
       order.status = status;
-      order.trackingTimeline = updatedTimeline;
+      order.trackingTimeline = timeline;
       if (status === 'Delivered') {
-        order.paymentStatus = 'Completed';
+        order.paymentStatus = 'Paid / Settled';
       }
-
       await order.save();
+
       return res.json({ success: true, message: `Order status updated to ${status}`, data: order });
     } else {
       const order = mockStore.orders.find((o) => o._id.toString() === id.toString());
       if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
       order.status = status;
-      order.trackingTimeline = updatedTimeline;
+      order.trackingTimeline = timeline;
       if (status === 'Delivered') {
-        order.paymentStatus = 'Completed';
+        order.paymentStatus = 'Paid / Settled';
       }
 
       return res.json({ success: true, message: `Order status updated to ${status}`, data: order });

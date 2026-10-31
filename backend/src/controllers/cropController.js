@@ -5,46 +5,69 @@ const mockStore = require('../utils/mockStore');
 
 const isDBConnected = () => mongoose.connection.readyState === 1;
 
-// Helper to compute agronomic advice from NPK & soil stats
 const computeSoilRecommendation = (n, p, k, moisture, ph) => {
   const recommendations = [];
-
-  // Nitrogen advice
-  if (n < 120) {
-    recommendations.push('Nitrogen is below threshold (<120 mg/kg): Apply organic neem-coated urea or well-rotted vermicompost to prevent chlorosis.');
-  } else if (n > 200) {
-    recommendations.push('Excess Nitrogen (>200 mg/kg): Halt urea/chemical nitrogen to avoid excessive vegetative rank growth and lodging.');
+  if (n < 240) {
+    recommendations.push('Nitrogen is critically low (<240 kg/ha): Apply neem-coated urea in split doses or vermicompost.');
+  } else if (n > 450) {
+    recommendations.push('Nitrogen is excessive (>450 kg/ha): Suspend synthetic N application to prevent vegetative lodging.');
   } else {
-    recommendations.push('Nitrogen level is optimal.');
+    recommendations.push('Nitrogen is in optimal vegetative range (240-450 kg/ha).');
   }
 
-  // Phosphorus advice
-  if (p < 25) {
-    recommendations.push('Phosphorus is deficient (<25 mg/kg): Supplement with Single Super Phosphate (SSP) or bone meal to strengthen root development.');
+  if (p < 20) {
+    recommendations.push('Phosphorus is deficient (<20 kg/ha): Apply SSP (Single Super Phosphate) or rock phosphate.');
   } else {
-    recommendations.push('Phosphorus level supports healthy root elongation.');
+    recommendations.push('Phosphorus is adequate for root elongation and tillering.');
   }
 
-  // Potassium advice
   if (k < 150) {
-    recommendations.push('Potassium is low (<150 mg/kg): Apply Muriate of Potash (MOP) to boost grain filling and disease resistance.');
+    recommendations.push('Potassium is low (<150 kg/ha): Broadcast Muriate of Potash (MOP) to boost grain filling.');
+  } else {
+    recommendations.push('Potassium reserves are sufficient for drought and disease resilience.');
   }
 
-  // Moisture advice
   if (moisture < 35) {
-    recommendations.push('Moisture critical alert (<35%): Deep root irrigation recommended within 24-48 hours.');
-  } else if (moisture > 70) {
-    recommendations.push('High moisture saturation (>70%): Clear field drainage channels to prevent fungal root rot and aeration loss.');
+    recommendations.push('Soil moisture is below 35%: Immediate micro-irrigation advised.');
+  } else if (moisture > 75) {
+    recommendations.push('Waterlogging risk (>75% moisture): Clear drainage canals immediately.');
   }
 
-  // pH advice
   if (ph < 6.0) {
     recommendations.push('Soil is acidic (pH < 6.0): Broadcast agricultural lime/dolomite (150-200 kg/acre).');
   } else if (ph > 7.8) {
-    recommendations.push('Soil is alkaline (pH > 7.8): Apply agricultural gypsum or sulfur to neutralize alkalinity.');
+    recommendations.push('Soil is alkaline (pH > 7.8): Apply agricultural gypsum or elemental sulfur.');
   }
 
   return recommendations.join(' ');
+};
+
+const formatCrop = (crop) => {
+  const c = crop.toObject ? crop.toObject() : { ...crop };
+  const currentStage = c.stage || (typeof c.stages === 'string' ? c.stages : c.stages?.currentStage) || 'Vegetative';
+  const soil = c.soilMetrics || c.soilHealth || {
+    ph: 6.8,
+    moisture: 45,
+    nitrogen: 280,
+    phosphorus: 24,
+    potassium: 200,
+  };
+
+  return {
+    ...c,
+    _id: c._id.toString(),
+    cropName: c.cropName || c.name || 'Hybrid Crop',
+    variety: c.variety || 'Standard High-Yield Hybrid',
+    areaAllocated: c.areaAllocated || c.areaAcres || 2.5,
+    stage: currentStage,
+    stages: c.stages || { currentStage, stageProgressPercent: 50 },
+    healthStatus: c.healthStatus || 'Good',
+    soilMetrics: soil,
+    soilHealth: soil,
+    activities: c.activities || [],
+    plantingDate: c.plantingDate || new Date(),
+    expectedHarvestDate: c.expectedHarvestDate || new Date(Date.now() + 90 * 86400000),
+  };
 };
 
 // @desc    Get crops (filter by farmId or get all for logged in user)
@@ -60,7 +83,7 @@ exports.getCrops = async (req, res) => {
       if (req.user.role === 'admin' && !farmId) delete query.farmerId;
 
       const crops = await Crop.find(query).populate('farmId', 'name location soilType').sort({ createdAt: -1 });
-      return res.json({ success: true, count: crops.length, data: crops });
+      return res.json({ success: true, count: crops.length, data: crops.map(formatCrop) });
     } else {
       let crops = mockStore.crops;
       if (req.user.role !== 'admin') {
@@ -69,7 +92,7 @@ exports.getCrops = async (req, res) => {
       if (farmId) {
         crops = crops.filter((c) => c.farmId.toString() === farmId.toString());
       }
-      return res.json({ success: true, count: crops.length, data: crops });
+      return res.json({ success: true, count: crops.length, data: crops.map(formatCrop) });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -88,14 +111,14 @@ exports.getCropById = async (req, res) => {
       if (!crop) {
         return res.status(404).json({ success: false, message: 'Crop not found' });
       }
-      return res.json({ success: true, data: crop });
+      return res.json({ success: true, data: formatCrop(crop) });
     } else {
       const crop = mockStore.crops.find((c) => c._id.toString() === id.toString());
       if (!crop) {
         return res.status(404).json({ success: false, message: 'Crop not found' });
       }
       const farm = mockStore.farms.find((f) => f._id.toString() === crop.farmId.toString());
-      return res.json({ success: true, data: { ...crop, farmId: farm || crop.farmId } });
+      return res.json({ success: true, data: { ...formatCrop(crop), farmId: farm || crop.farmId } });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -111,38 +134,32 @@ exports.createCrop = async (req, res) => {
       farmId,
       cropName,
       variety,
+      areaAllocated,
       plantingDate,
       expectedHarvestDate,
       healthStatus,
+      stage,
       stages,
+      soilMetrics,
       soilHealth,
       notes,
     } = req.body;
 
-    if (!farmId || !cropName || !plantingDate || !expectedHarvestDate) {
+    if (!farmId || !cropName) {
       return res.status(400).json({
         success: false,
-        message: 'Farm, crop name, planting date, and harvest date are required',
+        message: 'Farm and crop name are required',
       });
     }
 
-    const initialSoil = soilHealth || {
-      nitrogen: 140,
-      phosphorus: 35,
-      potassium: 200,
+    const currentStage = stage || (typeof stages === 'string' ? stages : stages?.currentStage) || 'Germination';
+    const soil = soilMetrics || soilHealth || {
+      nitrogen: 250,
+      phosphorus: 25,
+      potassium: 190,
       moisture: 45,
       ph: 6.8,
-      temperatureC: 25,
-      lastTested: new Date(),
     };
-
-    initialSoil.aiRecommendation = computeSoilRecommendation(
-      initialSoil.nitrogen,
-      initialSoil.phosphorus,
-      initialSoil.potassium,
-      initialSoil.moisture,
-      initialSoil.ph
-    );
 
     if (isDBConnected()) {
       const crop = await Crop.create({
@@ -150,18 +167,22 @@ exports.createCrop = async (req, res) => {
         farmerId: req.user._id,
         cropName,
         variety: variety || 'Standard High-Yield Hybrid',
-        plantingDate,
-        expectedHarvestDate,
-        healthStatus: healthStatus || 'Healthy',
-        stages: stages || { currentStage: 'Germination', stageProgressPercent: 15 },
-        soilHealth: initialSoil,
+        areaAllocated: Number(areaAllocated) || 2.0,
+        plantingDate: plantingDate || new Date(),
+        expectedHarvestDate: expectedHarvestDate || new Date(Date.now() + 90 * 86400000),
+        healthStatus: healthStatus || 'Good',
+        stage: currentStage,
+        stages: { currentStage, stageProgressPercent: 15 },
+        soilMetrics: soil,
+        soilHealth: soil,
+        activities: [],
         notes: notes || '',
       });
 
       return res.status(201).json({
         success: true,
-        message: 'Crop registered and monitored successfully',
-        data: crop,
+        message: 'Crop registered to farm successfully',
+        data: formatCrop(crop),
       });
     } else {
       const newCrop = {
@@ -170,11 +191,15 @@ exports.createCrop = async (req, res) => {
         farmerId: req.user._id,
         cropName,
         variety: variety || 'Standard High-Yield Hybrid',
-        plantingDate: new Date(plantingDate),
-        expectedHarvestDate: new Date(expectedHarvestDate),
-        healthStatus: healthStatus || 'Healthy',
-        stages: stages || { currentStage: 'Germination', stageProgressPercent: 15 },
-        soilHealth: initialSoil,
+        areaAllocated: Number(areaAllocated) || 2.0,
+        plantingDate: plantingDate || new Date(),
+        expectedHarvestDate: expectedHarvestDate || new Date(Date.now() + 90 * 86400000),
+        healthStatus: healthStatus || 'Good',
+        stage: currentStage,
+        stages: { currentStage, stageProgressPercent: 15 },
+        soilMetrics: soil,
+        soilHealth: soil,
+        activities: [],
         notes: notes || '',
         createdAt: new Date(),
       };
@@ -182,8 +207,8 @@ exports.createCrop = async (req, res) => {
       mockStore.crops.unshift(newCrop);
       return res.status(201).json({
         success: true,
-        message: 'Crop registered and monitored successfully',
-        data: newCrop,
+        message: 'Crop registered to farm successfully',
+        data: formatCrop(newCrop),
       });
     }
   } catch (error) {
@@ -191,46 +216,106 @@ exports.createCrop = async (req, res) => {
   }
 };
 
-// @desc    Update crop stage, health, or notes
+// @desc    Update crop (stage, health, notes, etc.)
 // @route   PUT /api/crops/:id
 // @access  Private
 exports.updateCrop = async (req, res) => {
   try {
     const { id } = req.params;
-    const { cropName, variety, healthStatus, stages, notes, expectedHarvestDate } = req.body;
+    const { stage, stages, healthStatus, notes, areaAllocated, cropName, variety } = req.body;
+
+    const newStage = stage || (typeof stages === 'string' ? stages : stages?.currentStage);
 
     if (isDBConnected()) {
       const crop = await Crop.findById(id);
       if (!crop) return res.status(404).json({ success: false, message: 'Crop not found' });
 
+      if (newStage) {
+        crop.stage = newStage;
+        crop.stages = { currentStage: newStage, stageProgressPercent: crop.stages?.stageProgressPercent || 50 };
+      }
+      if (healthStatus) crop.healthStatus = healthStatus;
+      if (notes !== undefined) crop.notes = notes;
+      if (areaAllocated) crop.areaAllocated = Number(areaAllocated);
       if (cropName) crop.cropName = cropName;
       if (variety) crop.variety = variety;
-      if (healthStatus) crop.healthStatus = healthStatus;
-      if (stages) crop.stages = { ...crop.stages, ...stages };
-      if (notes !== undefined) crop.notes = notes;
-      if (expectedHarvestDate) crop.expectedHarvestDate = expectedHarvestDate;
 
-      const updated = await crop.save();
-      return res.json({ success: true, message: 'Crop status updated', data: updated });
+      await crop.save();
+      return res.json({ success: true, message: 'Crop updated successfully', data: formatCrop(crop) });
     } else {
       const crop = mockStore.crops.find((c) => c._id.toString() === id.toString());
       if (!crop) return res.status(404).json({ success: false, message: 'Crop not found' });
 
+      if (newStage) {
+        crop.stage = newStage;
+        crop.stages = { currentStage: newStage, stageProgressPercent: crop.stages?.stageProgressPercent || 50 };
+      }
+      if (healthStatus) crop.healthStatus = healthStatus;
+      if (notes !== undefined) crop.notes = notes;
+      if (areaAllocated) crop.areaAllocated = Number(areaAllocated);
       if (cropName) crop.cropName = cropName;
       if (variety) crop.variety = variety;
-      if (healthStatus) crop.healthStatus = healthStatus;
-      if (stages) crop.stages = { ...crop.stages, ...stages };
-      if (notes !== undefined) crop.notes = notes;
-      if (expectedHarvestDate) crop.expectedHarvestDate = new Date(expectedHarvestDate);
 
-      return res.json({ success: true, message: 'Crop status updated', data: crop });
+      return res.json({ success: true, message: 'Crop updated successfully', data: formatCrop(crop) });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Log new soil health test (NPK, moisture, pH)
+// @desc    Log field activity for a crop
+// @route   POST /api/crops/:id/activity
+// @access  Private
+exports.addActivity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, notes, waterAmount, fertilizerUsed } = req.body;
+
+    if (!action) {
+      return res.status(400).json({ success: false, message: 'Action name is required' });
+    }
+
+    const activityEntry = {
+      _id: 'act_' + Date.now(),
+      action,
+      notes: notes || '',
+      waterAmount: waterAmount || 'N/A',
+      fertilizerUsed: fertilizerUsed || 'None',
+      date: new Date(),
+    };
+
+    if (isDBConnected()) {
+      const crop = await Crop.findById(id);
+      if (!crop) return res.status(404).json({ success: false, message: 'Crop not found' });
+
+      if (!crop.activities) crop.activities = [];
+      crop.activities.unshift(activityEntry);
+      await crop.save();
+
+      return res.status(201).json({
+        success: true,
+        message: 'Field activity logged successfully',
+        data: formatCrop(crop),
+      });
+    } else {
+      const crop = mockStore.crops.find((c) => c._id.toString() === id.toString());
+      if (!crop) return res.status(404).json({ success: false, message: 'Crop not found' });
+
+      if (!crop.activities) crop.activities = [];
+      crop.activities.unshift(activityEntry);
+
+      return res.status(201).json({
+        success: true,
+        message: 'Field activity logged successfully',
+        data: formatCrop(crop),
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update soil health test values
 // @route   PUT /api/crops/:id/soil-health
 // @access  Private
 exports.updateSoilHealth = async (req, res) => {
@@ -243,7 +328,6 @@ exports.updateSoilHealth = async (req, res) => {
     const k = Number(potassium) || 200;
     const m = Number(moisture) || 45;
     const pVal = Number(ph) || 6.8;
-    const t = Number(temperatureC) || 25;
 
     const recommendation = computeSoilRecommendation(n, p, k, m, pVal);
 
@@ -253,7 +337,7 @@ exports.updateSoilHealth = async (req, res) => {
       potassium: k,
       moisture: m,
       ph: pVal,
-      temperatureC: t,
+      temperatureC: Number(temperatureC) || 25,
       lastTested: new Date(),
       aiRecommendation: recommendation,
     };
@@ -263,39 +347,25 @@ exports.updateSoilHealth = async (req, res) => {
       if (!crop) return res.status(404).json({ success: false, message: 'Crop not found' });
 
       crop.soilHealth = soilData;
-
-      // Automatically adjust health status if critical
-      if (m < 25 || pVal < 5.2 || pVal > 8.5) {
-        crop.healthStatus = 'Critical';
-      } else if (m < 35 || n < 100 || p < 20 || k < 120) {
-        crop.healthStatus = 'Attention Needed';
-      } else {
-        crop.healthStatus = 'Healthy';
-      }
-
+      crop.soilMetrics = soilData;
       await crop.save();
+
       return res.json({
         success: true,
         message: 'Soil health metrics updated with AI recommendation',
-        data: crop,
+        data: formatCrop(crop),
       });
     } else {
       const crop = mockStore.crops.find((c) => c._id.toString() === id.toString());
       if (!crop) return res.status(404).json({ success: false, message: 'Crop not found' });
 
       crop.soilHealth = soilData;
-      if (m < 25 || pVal < 5.2 || pVal > 8.5) {
-        crop.healthStatus = 'Critical';
-      } else if (m < 35 || n < 100 || p < 20 || k < 120) {
-        crop.healthStatus = 'Attention Needed';
-      } else {
-        crop.healthStatus = 'Healthy';
-      }
+      crop.soilMetrics = soilData;
 
       return res.json({
         success: true,
         message: 'Soil health metrics updated with AI recommendation',
-        data: crop,
+        data: formatCrop(crop),
       });
     }
   } catch (error) {
@@ -311,11 +381,17 @@ exports.deleteCrop = async (req, res) => {
     const { id } = req.params;
 
     if (isDBConnected()) {
+      const crop = await Crop.findById(id);
+      if (!crop) return res.status(404).json({ success: false, message: 'Crop not found' });
+
       await Crop.findByIdAndDelete(id);
-      return res.json({ success: true, message: 'Crop deleted' });
+      return res.json({ success: true, message: 'Crop removed from farm plan' });
     } else {
-      mockStore.crops = mockStore.crops.filter((c) => c._id.toString() !== id.toString());
-      return res.json({ success: true, message: 'Crop deleted' });
+      const index = mockStore.crops.findIndex((c) => c._id.toString() === id.toString());
+      if (index === -1) return res.status(404).json({ success: false, message: 'Crop not found' });
+
+      mockStore.crops.splice(index, 1);
+      return res.json({ success: true, message: 'Crop removed from farm plan' });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

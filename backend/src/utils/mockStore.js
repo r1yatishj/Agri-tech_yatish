@@ -2,6 +2,19 @@
 const bcrypt = require('bcryptjs');
 
 const mockStore = {
+  activePestAlert: {
+    alertActive: true,
+    riskLevel: 'High',
+    pestName: 'Fall Armyworm (Spodoptera frugiperda)',
+    scientificName: 'Spodoptera frugiperda (J.E. Smith)',
+    affectedCrops: ['Basmati Rice', 'Maize', 'Yellow Mustard'],
+    symptoms: 'Irregular ragged pinholes and skeletonized leaves with moist sawdust-like larval frass in leaf whorls.',
+    recommendedTreatment: {
+      organic: 'Foliar spray of 5% Neem Seed Kernel Extract (NSKE) or Bacillus thuringiensis (Bt var. kurstaki) @ 2g/L water during early morning.',
+      chemical: 'Targeted application of Emamectin Benzoate 5% SG @ 0.4g/L or Chlorantraniliprole 18.5% SC @ 0.3ml/L directly into leaf whorls.'
+    }
+  },
+
   users: [
     {
       _id: 'user_admin_01',
@@ -31,9 +44,18 @@ const mockStore = {
     {
       _id: 'farm_01',
       farmerId: 'user_farmer_01',
+      farmName: 'Surya Green Valley Farm',
       name: 'Surya Green Valley Farm',
-      location: 'Village Sultanpur, Kota, Rajasthan',
+      location: {
+        village: 'Sultanpur',
+        district: 'Kota',
+        state: 'Rajasthan'
+      },
       sizeAcres: 8.5,
+      totalArea: {
+        value: 8.5,
+        unit: 'Acres'
+      },
       soilType: 'Loamy',
       cropsGrown: ['Basmati Rice', 'Mustard', 'Wheat'],
       irrigationType: 'Drip Irrigation',
@@ -48,9 +70,18 @@ const mockStore = {
     {
       _id: 'farm_02',
       farmerId: 'user_farmer_01',
+      farmName: 'Kaveri Organic Orchards',
       name: 'Kaveri Organic Orchards',
-      location: 'Chambal Catchment, Bundi, Rajasthan',
+      location: {
+        village: 'Chambal Catchment',
+        district: 'Bundi',
+        state: 'Rajasthan'
+      },
       sizeAcres: 4.2,
+      totalArea: {
+        value: 4.2,
+        unit: 'Acres'
+      },
       soilType: 'Black Soil',
       cropsGrown: ['Cotton', 'Pomegranate', 'Chickpea'],
       irrigationType: 'Sprinkler',
@@ -71,23 +102,50 @@ const mockStore = {
       farmerId: 'user_farmer_01',
       cropName: 'Basmati Rice (Pusa 1121)',
       variety: 'Aromatic Long Grain',
-      plantingDate: new Date('2026-06-20'),
-      expectedHarvestDate: new Date('2026-11-15'),
-      healthStatus: 'Healthy',
+      areaAllocated: 5.0,
+      plantingDate: '2026-06-20',
+      expectedHarvestDate: '2026-11-15',
+      stage: 'Flowering',
+      healthStatus: 'Excellent',
       stages: {
         currentStage: 'Flowering',
         stageProgressPercent: 68,
       },
+      soilMetrics: {
+        nitrogen: 280,
+        phosphorus: 24,
+        potassium: 210,
+        moisture: 58,
+        ph: 6.7,
+      },
       soilHealth: {
-        nitrogen: 155, // N: mg/kg
-        phosphorus: 42, // P: mg/kg
-        potassium: 220, // K: mg/kg
-        moisture: 58, // %
+        nitrogen: 280,
+        phosphorus: 24,
+        potassium: 210,
+        moisture: 58,
         ph: 6.7,
         temperatureC: 26,
         lastTested: new Date(),
         aiRecommendation: 'Optimal vegetative parameters. Soil nitrogen and moisture are in the prime range. Continue micro-irrigation regimen.',
       },
+      activities: [
+        {
+          _id: 'act_01',
+          action: 'Fertigation & Bio-Stimulant',
+          waterAmount: '2500 Litres drip',
+          fertilizerUsed: 'Jeevamrit concentrate 5L',
+          notes: 'High tillering density observed. Zero pest symptoms.',
+          date: new Date(Date.now() - 2 * 86400000)
+        },
+        {
+          _id: 'act_02',
+          action: 'Weeding & Soil Aeration',
+          waterAmount: 'None',
+          fertilizerUsed: 'Neem cake 20kg',
+          notes: 'Inter-row weeding completed between plots A & B.',
+          date: new Date(Date.now() - 6 * 86400000)
+        }
+      ],
       notes: 'Certified organic bio-stimulant applied on day 40. High tillering density observed.',
       createdAt: new Date('2026-06-20'),
     },
@@ -97,16 +155,25 @@ const mockStore = {
       farmerId: 'user_farmer_01',
       cropName: 'Yellow Mustard (Pusa Bold)',
       variety: 'Drought Tolerant Hybrid',
-      plantingDate: new Date('2026-10-05'),
-      expectedHarvestDate: new Date('2027-02-25'),
+      areaAllocated: 3.5,
+      plantingDate: '2026-10-05',
+      expectedHarvestDate: '2027-02-25',
+      stage: 'Vegetative',
       healthStatus: 'Good',
       stages: {
         currentStage: 'Vegetative',
         stageProgressPercent: 30,
       },
+      soilMetrics: {
+        nitrogen: 260,
+        phosphorus: 28,
+        potassium: 195,
+        moisture: 42,
+        ph: 7.1,
+      },
       soilHealth: {
-        nitrogen: 135,
-        phosphorus: 38,
+        nitrogen: 260,
+        phosphorus: 28,
         potassium: 195,
         moisture: 42,
         ph: 7.1,
@@ -114,6 +181,16 @@ const mockStore = {
         lastTested: new Date(),
         aiRecommendation: 'Phosphorus level is healthy for root growth. Consider light boron top-dressing before flower initiation.',
       },
+      activities: [
+        {
+          _id: 'act_03',
+          action: 'Thinning & Sprinkler Irrigation',
+          waterAmount: '1800 Litres',
+          fertilizerUsed: 'None',
+          notes: 'Germination rate at 94%. Uniform plant stand.',
+          date: new Date(Date.now() - 1 * 86400000)
+        }
+      ],
       notes: 'Germination rate at 94%. Zero pest signs detected.',
       createdAt: new Date('2026-10-05'),
     },
@@ -122,17 +199,26 @@ const mockStore = {
       farmId: 'farm_02',
       farmerId: 'user_farmer_01',
       cropName: 'Bt Cotton (Bollgard II)',
-      variety: 'Long Staple',
-      plantingDate: new Date('2026-05-15'),
-      expectedHarvestDate: new Date('2026-11-30'),
-      healthStatus: 'Attention Needed',
+      variety: 'Long Staple Hybrid',
+      areaAllocated: 4.2,
+      plantingDate: '2026-05-15',
+      expectedHarvestDate: '2026-11-30',
+      stage: 'Maturity',
+      healthStatus: 'Needs Attention',
       stages: {
-        currentStage: 'Yield Formation',
+        currentStage: 'Maturity',
         stageProgressPercent: 78,
       },
+      soilMetrics: {
+        nitrogen: 180,
+        phosphorus: 18,
+        potassium: 160,
+        moisture: 36,
+        ph: 7.4,
+      },
       soilHealth: {
-        nitrogen: 110,
-        phosphorus: 28,
+        nitrogen: 180,
+        phosphorus: 18,
         potassium: 160,
         moisture: 36,
         ph: 7.4,
@@ -140,7 +226,17 @@ const mockStore = {
         lastTested: new Date(),
         aiRecommendation: 'Moisture drop detected in quadrant B. Recommend supplementary drip irrigation of 35mm within 48 hours to avert boll drop.',
       },
-      notes: 'Slight whitefly presence on lower canopy. Neem oil 1500ppm sprayed yesterday.',
+      activities: [
+        {
+          _id: 'act_04',
+          action: 'Neem Oil Spray (1500 ppm)',
+          waterAmount: '500 Litres',
+          fertilizerUsed: 'Neem oil botanical spray',
+          notes: 'Slight whitefly presence detected on lower canopy.',
+          date: new Date(Date.now() - 3 * 86400000)
+        }
+      ],
+      notes: 'Slight whitefly presence on lower canopy. Neem oil 1500ppm sprayed.',
       createdAt: new Date('2026-05-15'),
     },
   ],
@@ -149,7 +245,7 @@ const mockStore = {
     {
       _id: 'prod_01',
       name: 'Pusa Gold Hybrid Wheat Seeds',
-      category: 'Seeds',
+      category: 'Seeds & Saplings',
       price: 850,
       unit: '20 kg bag',
       description: 'High-yielding, rust-resistant certified wheat seed variety with 48 quintal/hectare potential yield.',
@@ -163,7 +259,7 @@ const mockStore = {
     {
       _id: 'prod_02',
       name: 'Organic Jeevamrit Bio-Fertilizer Concentrate',
-      category: 'Bio-Fertilizers',
+      category: 'Bio-Fertilizers & Nutrients',
       price: 620,
       unit: '5 Litre can',
       description: 'Fermented microbial consortium rich in beneficial soil flora. Enriches indigenous micro-organisms and boosts cation exchange capacity.',
@@ -177,7 +273,7 @@ const mockStore = {
     {
       _id: 'prod_03',
       name: 'Cold-Pressed Neem Oil (10,000 PPM Azadirachtin)',
-      category: 'Pest Control',
+      category: 'Organic Pest Solutions',
       price: 490,
       unit: '1 Litre bottle',
       description: 'Natural botanical insecticide and repellent. Controls chewing & sucking pests including aphids, whiteflies, and bollworms without residue.',
@@ -191,7 +287,7 @@ const mockStore = {
     {
       _id: 'prod_04',
       name: 'Precision Digital Soil NPK & pH Meter Kit',
-      category: 'Irrigation & Tools',
+      category: 'Soil Testing Kits',
       price: 1850,
       unit: '1 Kit (Tester + Probes)',
       description: 'Instant readout digital probe measuring Soil Moisture, pH, and electrical conductivity with LCD display and 1-year warranty.',
@@ -205,7 +301,7 @@ const mockStore = {
     {
       _id: 'prod_05',
       name: 'Solar Automatic Drip Irrigation Timer & Valve',
-      category: 'Irrigation & Tools',
+      category: 'Smart Irrigation & Tools',
       price: 2400,
       unit: '1 Set with Solar Panel',
       description: 'Automated solar-powered irrigation valve with programmable timers and soil moisture sensor trigger integration.',
@@ -219,7 +315,7 @@ const mockStore = {
     {
       _id: 'prod_06',
       name: 'Agricultural Dolomite & Gypsum Soil Conditioner',
-      category: 'Soil Amendments',
+      category: 'Soil Testing Kits',
       price: 399,
       unit: '25 kg bag',
       description: 'Remediates alkaline or acidic soils, balances soil calcium and magnesium, and improves water infiltration.',
@@ -244,7 +340,7 @@ const mockStore = {
           quantity: 2,
           price: 850,
           unit: '20 kg bag',
-          category: 'Seeds',
+          category: 'Seeds & Saplings',
         },
         {
           itemId: 'prod_03',
@@ -252,7 +348,7 @@ const mockStore = {
           quantity: 1,
           price: 490,
           unit: '1 Litre bottle',
-          category: 'Pest Control',
+          category: 'Organic Pest Solutions',
         },
       ],
       totalAmount: 2190,
@@ -272,10 +368,88 @@ const mockStore = {
         { stage: 'Out for Delivery', timestamp: new Date(), completed: false, detail: 'Expected delivery today by 4:00 PM' },
         { stage: 'Delivered', timestamp: null, completed: false, detail: 'Pending doorstep handover' },
       ],
-      paymentMethod: 'Kisan Credit Card / Cash On Delivery',
+      paymentMethod: 'Cash on Delivery',
       paymentStatus: 'COD Verified',
       createdAt: new Date(Date.now() - 3 * 86400000),
     },
+    {
+      _id: 'order_1002',
+      farmerId: 'user_farmer_01',
+      farmerName: 'Ramesh Kumar',
+      items: [
+        {
+          itemId: 'prod_02',
+          name: 'Organic Jeevamrit Bio-Fertilizer Concentrate',
+          quantity: 3,
+          price: 620,
+          unit: '5 Litre can',
+          category: 'Bio-Fertilizers & Nutrients',
+        }
+      ],
+      totalAmount: 1860,
+      status: 'Placed',
+      shippingAddress: {
+        fullName: 'Ramesh Kumar',
+        street: 'Near Panchayat Bhawan, Farm House #4',
+        villageOrCity: 'Sultanpur, Kota',
+        state: 'Rajasthan',
+        pincode: '324001',
+        phone: '+91 98234 56789',
+      },
+      trackingTimeline: [
+        { stage: 'Order Placed', timestamp: new Date(Date.now() - 1 * 86400000), completed: true, detail: 'Order placed by farmer' },
+      ],
+      paymentMethod: 'Cash on Delivery',
+      paymentStatus: 'Pending',
+      createdAt: new Date(Date.now() - 1 * 86400000),
+    }
+  ],
+
+  consultations: [
+    {
+      _id: 'consult_01',
+      farmerId: 'user_farmer_01',
+      farmerName: 'Ramesh Kumar',
+      cropAffected: 'Basmati Rice',
+      issueSubject: 'Yellowing of lower leaves and marginal tip burn',
+      symptoms: 'Lower leaves turning yellow with burnt tip edges. Field water level was dry for 3 days before irrigation.',
+      specializationRequested: 'Agronomist (Soil & Crop)',
+      urgency: 'Normal',
+      status: 'Prescription Provided',
+      createdAt: new Date(Date.now() - 2 * 86400000),
+      assignedExpert: {
+        name: 'Dr. Yatish Jangid (Senior Agronomist, ICAR Certified)',
+        designation: 'Crop Pathology & Soil Extension Specialist'
+      },
+      expertPrescription: {
+        diagnosis: 'Potassium (K) deficiency accentuated by temporary moisture stress during active tillering.',
+        immediateAction: 'Apply foliar spray of 1% Sulphate of Potash (0-0-50) @ 10g/L water in early morning.',
+        recommendedInputs: ['Sulphate of Potash (SOP)', 'Bio-Potash Mobilizing Bacteria', 'Neem Seed Cake'],
+        preventiveGuidelines: 'Maintain saturation water depth of 2-3 cm. Avoid sudden alternations of drought and flood.'
+      }
+    },
+    {
+      _id: 'consult_02',
+      farmerId: 'user_farmer_01',
+      farmerName: 'Ramesh Kumar',
+      cropAffected: 'Yellow Mustard',
+      issueSubject: 'White rust pustules on lower foliage',
+      symptoms: 'Raised white blister-like pustules appearing underneath leaves after recent foggy morning spell.',
+      specializationRequested: 'Plant Pathologist',
+      urgency: 'High',
+      status: 'Prescription Provided',
+      createdAt: new Date(Date.now() - 4 * 86400000),
+      assignedExpert: {
+        name: 'Dr. Sunita Sharma',
+        designation: 'Extension Pathologist'
+      },
+      expertPrescription: {
+        diagnosis: 'Albugo candida (White Rust) triggered by prolonged relative humidity >85%.',
+        immediateAction: 'Spray Mancozeb 75% WP @ 2.5g/L or Metalaxyl 8% + Mancozeb 64% WP @ 2g/L.',
+        recommendedInputs: ['Mancozeb 75 WP', 'Trichoderma bio-fungicide'],
+        preventiveGuidelines: 'Ensure good air circulation by removing weed hosts like wild radish and wild mustard.'
+      }
+    }
   ],
 
   weatherAlerts: [
@@ -309,7 +483,7 @@ const mockStore = {
       affectedCrops: ['Tomato', 'Maize', 'Vegetables'],
       severity: 'Info',
       isActive: true,
-      createdAt: new Date(Date.now() - 86400000),
+      createdAt: new Date(),
     },
   ],
 
@@ -317,12 +491,12 @@ const mockStore = {
     {
       _id: 'post_01',
       authorId: 'user_farmer_01',
-      authorName: 'Ramesh Kumar',
+      authorName: 'Ramesh Kumar (Kisan Mitra)',
       authorRole: 'farmer',
-      title: 'Yellowing of lower leaves in Basmati rice at flowering stage: Nitrogen deficiency or root fungus?',
+      title: 'Yellowing of leaves in Basmati rice at 68% flowering stage - what treatment is best?',
       content: 'I noticed that the lower leaves of my Basmati rice crop in Sultanpur are turning yellow with brown tips. Soil moisture is at 55%. Should I apply urea now or check for root rot?',
       category: 'Crop Diseases',
-      upvotes: 7,
+      upvotes: 8,
       upvotedBy: [],
       isResolved: true,
       hasExpertResponse: true,
@@ -333,6 +507,7 @@ const mockStore = {
           authorName: 'Dr. Yatish Jangid (Principal Agronomist)',
           authorRole: 'admin',
           comment: 'At 68% flowering stage, top-dressing with heavy chemical nitrogen can cause lodge and stem rot. Yellowing of bottom leaves with brown tip usually indicates Potassium (K) mobilization to grain heads, or early sheath blight. Please inspect the leaf collar for elliptical water-soaked lesions. If lesions exist, spray Validamycin 3% L @ 2ml/L. If leaves are clear, apply 1% SOP (Sulphate of Potash) foliar spray.',
+          content: 'At 68% flowering stage, top-dressing with heavy chemical nitrogen can cause lodge and stem rot. Yellowing of bottom leaves with brown tip usually indicates Potassium (K) mobilization to grain heads, or early sheath blight. Please inspect the leaf collar for elliptical water-soaked lesions. If lesions exist, spray Validamycin 3% L @ 2ml/L. If leaves are clear, apply 1% SOP (Sulphate of Potash) foliar spray.',
           isExpertAnswer: true,
           upvotes: 11,
           createdAt: new Date(Date.now() - 36000000),
@@ -347,7 +522,7 @@ const mockStore = {
       authorRole: 'farmer',
       title: 'What is the optimal spacing for drip emitters when cultivating Yellow Mustard in loamy soil?',
       content: 'Transitioning from flood to drip irrigation for the upcoming rabi season. For loamy soil with 6.8 pH, what lateral spacing and emitter discharge (LPH) provides maximum water conservation?',
-      category: 'Soil & Fertilizers',
+      category: 'Soil & Water',
       upvotes: 4,
       upvotedBy: [],
       isResolved: false,
@@ -359,6 +534,7 @@ const mockStore = {
           authorName: 'Dr. Yatish Jangid (Agronomist)',
           authorRole: 'admin',
           comment: 'For loamy soil, lateral spacing of 1.2 meters with 2 LPH inline emitters spaced 30 cm apart works best for mustard. Loam has balanced horizontal capillary spread, so 30 cm spacing will ensure an overlapping wetting bulb without deep percolation losses.',
+          content: 'For loamy soil, lateral spacing of 1.2 meters with 2 LPH inline emitters spaced 30 cm apart works best for mustard. Loam has balanced horizontal capillary spread, so 30 cm spacing will ensure an overlapping wetting bulb without deep percolation losses.',
           isExpertAnswer: true,
           upvotes: 6,
           createdAt: new Date(Date.now() - 18000000),

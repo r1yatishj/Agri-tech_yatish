@@ -5,6 +5,7 @@ const {
   getAllUsers,
   updateUserRole,
   deleteUser,
+  broadcastAlert,
 } = require('../controllers/adminController');
 const { protect, adminOnly } = require('../middleware/auth');
 
@@ -15,5 +16,6 @@ router.get('/stats', getDashboardStats);
 router.get('/users', getAllUsers);
 router.put('/users/:id/role', updateUserRole);
 router.delete('/users/:id', deleteUser);
+router.post('/broadcast-alert', broadcastAlert);
 
 module.exports = router;

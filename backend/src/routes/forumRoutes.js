@@ -18,6 +18,7 @@ router.route('/:id')
   .get(getPostById)
   .delete(protect, deletePost);
 
+router.post('/:id/reply', protect, addResponse);
 router.post('/:id/responses', protect, addResponse);
 router.post('/:id/upvote', protect, upvotePost);
 

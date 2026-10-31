@@ -20,6 +20,17 @@ const generateToken = (user) => {
   );
 };
 
+const formatUserResponse = (user) => ({
+  id: user._id.toString(),
+  _id: user._id.toString(),
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  language: user.language || 'en',
+  phone: user.phone || '',
+  location: user.location || '',
+});
+
 // @desc    Register a new user (farmer or admin)
 // @route   POST /api/auth/register
 // @access  Public
@@ -56,23 +67,21 @@ exports.register = async (req, res) => {
       });
 
       const token = generateToken(user);
+      const userObj = formatUserResponse(user);
 
       return res.status(201).json({
         success: true,
         message: 'Registration successful! Welcome to Agri-Tech.',
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          language: user.language,
-          phone: user.phone,
-          location: user.location,
+        user: userObj,
+        data: {
+          token,
+          ...userObj,
+          user: userObj,
         },
       });
     } else {
-      // In-Memory fallback
+      // In-Memory Fallback
       const existing = mockStore.users.find(
         (u) => u.email.toLowerCase() === email.toLowerCase()
       );
@@ -97,19 +106,17 @@ exports.register = async (req, res) => {
 
       mockStore.users.push(newUser);
       const token = generateToken(newUser);
+      const userObj = formatUserResponse(newUser);
 
       return res.status(201).json({
         success: true,
         message: 'Registration successful! Welcome to Agri-Tech.',
         token,
-        user: {
-          id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          language: newUser.language,
-          phone: newUser.phone,
-          location: newUser.location,
+        user: userObj,
+        data: {
+          token,
+          ...userObj,
+          user: userObj,
         },
       });
     }
@@ -153,19 +160,17 @@ exports.login = async (req, res) => {
       }
 
       const token = generateToken(user);
+      const userObj = formatUserResponse(user);
 
       return res.json({
         success: true,
         message: 'Login successful',
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          language: user.language,
-          phone: user.phone,
-          location: user.location,
+        user: userObj,
+        data: {
+          token,
+          ...userObj,
+          user: userObj,
         },
       });
     } else {
@@ -189,46 +194,38 @@ exports.login = async (req, res) => {
       }
 
       const token = generateToken(user);
+      const userObj = formatUserResponse(user);
 
       return res.json({
         success: true,
         message: 'Login successful',
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          language: user.language,
-          phone: user.phone,
-          location: user.location,
+        user: userObj,
+        data: {
+          token,
+          ...userObj,
+          user: userObj,
         },
       });
     }
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message || 'Login failed',
+      message: error.message || 'Error occurred during authentication',
     });
   }
 };
 
-// @desc    Get current logged in user
+// @desc    Get current logged in user profile
 // @route   GET /api/auth/me
 // @access  Private
 exports.getMe = async (req, res) => {
   try {
+    const userObj = formatUserResponse(req.user);
     return res.json({
       success: true,
-      user: {
-        id: req.user._id,
-        name: req.user.name,
-        email: req.user.email,
-        role: req.user.role,
-        language: req.user.language || 'en',
-        phone: req.user.phone || '',
-        location: req.user.location || '',
-      },
+      user: userObj,
+      data: userObj,
     });
   } catch (error) {
     return res.status(500).json({
@@ -248,7 +245,7 @@ exports.updateProfile = async (req, res) => {
     if (isDBConnected()) {
       const user = await User.findById(req.user._id);
       if (!user) {
-        return res.status(404).json({ success: false, message: 'User not found' });
+        return res.status(404).json({ success: false, message: 'User account not found' });
       }
 
       if (name) user.name = name;
@@ -257,49 +254,40 @@ exports.updateProfile = async (req, res) => {
       if (location) user.location = location;
 
       await user.save();
+      const userObj = formatUserResponse(user);
 
       return res.json({
         success: true,
         message: 'Profile updated successfully',
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          language: user.language,
-          phone: user.phone,
-          location: user.location,
-        },
+        user: userObj,
+        data: userObj,
       });
     } else {
       const user = mockStore.users.find(
         (u) => u._id.toString() === req.user._id.toString()
       );
-      if (user) {
-        if (name) user.name = name;
-        if (language) user.language = language;
-        if (phone) user.phone = phone;
-        if (location) user.location = location;
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User account not found' });
       }
+
+      if (name) user.name = name;
+      if (language) user.language = language;
+      if (phone) user.phone = phone;
+      if (location) user.location = location;
+
+      const userObj = formatUserResponse(user);
 
       return res.json({
         success: true,
         message: 'Profile updated successfully',
-        user: {
-          id: req.user._id,
-          name: name || req.user.name,
-          email: req.user.email,
-          role: req.user.role,
-          language: language || req.user.language,
-          phone: phone || req.user.phone,
-          location: location || req.user.location,
-        },
+        user: userObj,
+        data: userObj,
       });
     }
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message || 'Profile update failed',
+      message: error.message || 'Error updating user profile',
     });
   }
 };

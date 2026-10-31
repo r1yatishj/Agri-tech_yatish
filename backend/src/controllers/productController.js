@@ -4,29 +4,53 @@ const mockStore = require('../utils/mockStore');
 
 const isDBConnected = () => mongoose.connection.readyState === 1;
 
+const matchesCategory = (productCat, selectedCat) => {
+  if (!selectedCat || selectedCat === 'All') return true;
+  const p = (productCat || '').toLowerCase();
+  const s = selectedCat.toLowerCase();
+  if (p === s) return true;
+  if (p.includes(s) || s.includes(p)) return true;
+
+  // Normalized synonyms
+  if (s.includes('seed') && p.includes('seed')) return true;
+  if (s.includes('fertilizer') && p.includes('fertilizer')) return true;
+  if (s.includes('pest') && (p.includes('pest') || p.includes('protect'))) return true;
+  if (s.includes('irrigation') && (p.includes('irrigation') || p.includes('tool'))) return true;
+  if (s.includes('soil') && (p.includes('soil') || p.includes('kit') || p.includes('amendment'))) return true;
+
+  return false;
+};
+
 // @desc    Get all marketplace products with search and category filters
-// @route   GET /api/products
+// @route   GET /api/products and GET /api/resources
 // @access  Public
 exports.getProducts = async (req, res) => {
   try {
     const { category, search } = req.query;
 
     if (isDBConnected()) {
-      const query = {};
-      if (category && category !== 'All') {
-        query.category = category;
-      }
+      let query = {};
       if (search) {
-        query.name = { $regex: search, $options: 'i' };
+        query.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+        ];
       }
 
-      const products = await Product.find(query).sort({ rating: -1, createdAt: -1 });
+      let products = await Product.find(query).sort({ rating: -1, createdAt: -1 });
+
+      if (category && category !== 'All') {
+        products = products.filter((item) => matchesCategory(item.category, category));
+      }
+
       return res.json({ success: true, count: products.length, data: products });
     } else {
       let products = mockStore.products;
+
       if (category && category !== 'All') {
-        products = products.filter((p) => p.category === category);
+        products = products.filter((p) => matchesCategory(p.category, category));
       }
+
       if (search) {
         const s = search.toLowerCase();
         products = products.filter(
@@ -35,6 +59,7 @@ exports.getProducts = async (req, res) => {
             p.description.toLowerCase().includes(s)
         );
       }
+
       return res.json({ success: true, count: products.length, data: products });
     }
   } catch (error) {
@@ -63,15 +88,27 @@ exports.getProductById = async (req, res) => {
   }
 };
 
-// @desc    Create new product (Admin)
+// @desc    Create product
 // @route   POST /api/products
 // @access  Private / Admin
 exports.createProduct = async (req, res) => {
   try {
-    const { name, category, price, unit, description, stock, imageUrl, badge } = req.body;
+    const {
+      name,
+      category,
+      price,
+      unit,
+      description,
+      stock,
+      imageUrl,
+      badge,
+    } = req.body;
 
-    if (!name || !category || !price) {
-      return res.status(400).json({ success: false, message: 'Name, category, and price are required' });
+    if (!name || !price || !category) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, price, and category are required',
+      });
     }
 
     if (isDBConnected()) {
@@ -82,10 +119,12 @@ exports.createProduct = async (req, res) => {
         unit: unit || '1 Unit',
         description: description || '',
         stock: Number(stock) || 50,
-        imageUrl: imageUrl || 'https://images.unsplash.com/photo-1592417817098-8f3d69109853?auto=format&fit=crop&w=600&q=80',
-        badge: badge || 'Verified',
+        imageUrl: imageUrl || 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&q=80',
+        badge: badge || 'New',
+        inStock: (Number(stock) || 50) > 0,
       });
-      return res.status(201).json({ success: true, message: 'Product added to marketplace', data: product });
+
+      return res.status(201).json({ success: true, message: 'Product created', data: product });
     } else {
       const newProduct = {
         _id: 'prod_' + Date.now(),
@@ -97,53 +136,36 @@ exports.createProduct = async (req, res) => {
         stock: Number(stock) || 50,
         rating: 5.0,
         reviewCount: 1,
-        imageUrl: imageUrl || 'https://images.unsplash.com/photo-1592417817098-8f3d69109853?auto=format&fit=crop&w=600&q=80',
-        badge: badge || 'Verified',
-        inStock: true,
+        imageUrl: imageUrl || 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&q=80',
+        badge: badge || 'New',
+        inStock: (Number(stock) || 50) > 0,
         createdAt: new Date(),
       };
+
       mockStore.products.unshift(newProduct);
-      return res.status(201).json({ success: true, message: 'Product added to marketplace', data: newProduct });
+      return res.status(201).json({ success: true, message: 'Product created', data: newProduct });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Update product (Admin)
+// @desc    Update product
 // @route   PUT /api/products/:id
 // @access  Private / Admin
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, price, unit, description, stock, badge } = req.body;
 
     if (isDBConnected()) {
-      const product = await Product.findById(id);
+      const product = await Product.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
       if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-
-      if (name) product.name = name;
-      if (category) product.category = category;
-      if (price) product.price = Number(price);
-      if (unit) product.unit = unit;
-      if (description) product.description = description;
-      if (stock !== undefined) product.stock = Number(stock);
-      if (badge) product.badge = badge;
-
-      await product.save();
       return res.json({ success: true, message: 'Product updated', data: product });
     } else {
       const product = mockStore.products.find((p) => p._id.toString() === id.toString());
       if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
-      if (name) product.name = name;
-      if (category) product.category = category;
-      if (price) product.price = Number(price);
-      if (unit) product.unit = unit;
-      if (description) product.description = description;
-      if (stock !== undefined) product.stock = Number(stock);
-      if (badge) product.badge = badge;
-
+      Object.assign(product, req.body);
       return res.json({ success: true, message: 'Product updated', data: product });
     }
   } catch (error) {
@@ -151,7 +173,7 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-// @desc    Delete product (Admin)
+// @desc    Delete product
 // @route   DELETE /api/products/:id
 // @access  Private / Admin
 exports.deleteProduct = async (req, res) => {
@@ -159,11 +181,15 @@ exports.deleteProduct = async (req, res) => {
     const { id } = req.params;
 
     if (isDBConnected()) {
-      await Product.findByIdAndDelete(id);
-      return res.json({ success: true, message: 'Product deleted from marketplace' });
+      const product = await Product.findByIdAndDelete(id);
+      if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+      return res.json({ success: true, message: 'Product deleted' });
     } else {
-      mockStore.products = mockStore.products.filter((p) => p._id.toString() !== id.toString());
-      return res.json({ success: true, message: 'Product deleted from marketplace' });
+      const index = mockStore.products.findIndex((p) => p._id.toString() === id.toString());
+      if (index === -1) return res.status(404).json({ success: false, message: 'Product not found' });
+
+      mockStore.products.splice(index, 1);
+      return res.json({ success: true, message: 'Product deleted' });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

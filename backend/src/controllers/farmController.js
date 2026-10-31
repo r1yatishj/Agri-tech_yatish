@@ -5,6 +5,24 @@ const mockStore = require('../utils/mockStore');
 
 const isDBConnected = () => mongoose.connection.readyState === 1;
 
+const formatFarm = (farm) => {
+  const f = farm.toObject ? farm.toObject() : { ...farm };
+  const size = f.sizeAcres || f.totalArea?.value || 5;
+  const name = f.farmName || f.name || 'Unnamed Farm';
+  return {
+    ...f,
+    _id: f._id.toString(),
+    farmName: name,
+    name: name,
+    sizeAcres: size,
+    totalArea: f.totalArea || { value: size, unit: 'Acres' },
+    location: f.location || { village: 'Sultanpur', district: 'Kota', state: 'Rajasthan' },
+    cropsGrown: f.cropsGrown || ['Wheat', 'Rice'],
+    irrigationType: f.irrigationType || 'Drip Irrigation',
+    soilType: f.soilType || 'Loamy',
+  };
+};
+
 // @desc    Get all farms for current user (or all if admin)
 // @route   GET /api/farms
 // @access  Private
@@ -12,15 +30,17 @@ exports.getFarms = async (req, res) => {
   try {
     if (isDBConnected()) {
       const query = req.user.role === 'admin' ? {} : { farmerId: req.user._id };
-      const farms = await Farm.find(query).sort({ createdAt: -1 });
+      const rawFarms = await Farm.find(query).sort({ createdAt: -1 });
+      const farms = rawFarms.map(formatFarm);
       return res.json({ success: true, count: farms.length, data: farms });
     } else {
-      const farms =
+      const rawFarms =
         req.user.role === 'admin'
           ? mockStore.farms
           : mockStore.farms.filter(
               (f) => f.farmerId.toString() === req.user._id.toString()
             );
+      const farms = rawFarms.map(formatFarm);
       return res.json({ success: true, count: farms.length, data: farms });
     }
   } catch (error) {
@@ -41,42 +61,49 @@ exports.getFarmById = async (req, res) => {
         return res.status(404).json({ success: false, message: 'Farm profile not found' });
       }
 
-      // Check ownership or admin
       if (req.user.role !== 'admin' && farm.farmerId.toString() !== req.user._id.toString()) {
         return res.status(403).json({ success: false, message: 'Access denied to this farm' });
       }
 
       const crops = await Crop.find({ farmId: farm._id });
-      return res.json({ success: true, data: { ...farm.toObject(), crops } });
+      return res.json({ success: true, data: { ...formatFarm(farm), crops } });
     } else {
       const farm = mockStore.farms.find((f) => f._id.toString() === id.toString());
       if (!farm) {
         return res.status(404).json({ success: false, message: 'Farm profile not found' });
       }
 
-      if (req.user.role !== 'admin' && farm.farmerId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ success: false, message: 'Access denied to this farm' });
-      }
-
-      const crops = mockStore.crops.filter((c) => c.farmId.toString() === farm._id.toString());
-      return res.json({ success: true, data: { ...farm, crops } });
+      const crops = mockStore.crops.filter((c) => c.farmId.toString() === id.toString());
+      return res.json({ success: true, data: { ...formatFarm(farm), crops } });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Create new farm
+// @desc    Register a new farm profile
 // @route   POST /api/farms
 // @access  Private
 exports.createFarm = async (req, res) => {
   try {
-    const { name, location, sizeAcres, soilType, cropsGrown, irrigationType } = req.body;
+    const {
+      name,
+      farmName,
+      location,
+      sizeAcres,
+      totalArea,
+      soilType,
+      cropsGrown,
+      irrigationType
+    } = req.body;
 
-    if (!name || !location || !sizeAcres) {
+    const resolvedName = farmName || name;
+    const resolvedSize = totalArea?.value || sizeAcres || 5;
+
+    if (!resolvedName) {
       return res.status(400).json({
         success: false,
-        message: 'Farm name, location, and size in acres are required',
+        message: 'Farm name is required',
       });
     }
 
@@ -84,14 +111,21 @@ exports.createFarm = async (req, res) => {
       ? cropsGrown
       : typeof cropsGrown === 'string'
       ? cropsGrown.split(',').map((c) => c.trim()).filter(Boolean)
-      : [];
+      : ['Wheat', 'Basmati Rice'];
+
+    let locString = 'Kota, Rajasthan';
+    if (typeof location === 'string') {
+      locString = location;
+    } else if (location && typeof location === 'object') {
+      locString = `${location.village || ''}, ${location.district || ''}, ${location.state || ''}`.replace(/^, |, $/g, '').trim() || 'Kota, Rajasthan';
+    }
 
     if (isDBConnected()) {
       const farm = await Farm.create({
         farmerId: req.user._id,
-        name,
-        location,
-        sizeAcres: Number(sizeAcres),
+        name: resolvedName,
+        location: locString,
+        sizeAcres: Number(resolvedSize),
         soilType: soilType || 'Loamy',
         cropsGrown: cropsList,
         irrigationType: irrigationType || 'Drip Irrigation',
@@ -106,15 +140,22 @@ exports.createFarm = async (req, res) => {
       return res.status(201).json({
         success: true,
         message: 'Farm profile registered successfully',
-        data: farm,
+        data: formatFarm({
+          ...farm.toObject(),
+          farmName: resolvedName,
+          totalArea: { value: Number(resolvedSize), unit: 'Acres' },
+          location: location || locString,
+        }),
       });
     } else {
       const newFarm = {
         _id: 'farm_' + Date.now(),
         farmerId: req.user._id,
-        name,
-        location,
-        sizeAcres: Number(sizeAcres),
+        name: resolvedName,
+        farmName: resolvedName,
+        location: location || locString,
+        sizeAcres: Number(resolvedSize),
+        totalArea: { value: Number(resolvedSize), unit: 'Acres' },
         soilType: soilType || 'Loamy',
         cropsGrown: cropsList,
         irrigationType: irrigationType || 'Drip Irrigation',
@@ -131,7 +172,7 @@ exports.createFarm = async (req, res) => {
       return res.status(201).json({
         success: true,
         message: 'Farm profile registered successfully',
-        data: newFarm,
+        data: formatFarm(newFarm),
       });
     }
   } catch (error) {
@@ -145,47 +186,50 @@ exports.createFarm = async (req, res) => {
 exports.updateFarm = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, location, sizeAcres, soilType, cropsGrown, irrigationType } = req.body;
+    const { name, farmName, location, sizeAcres, totalArea, soilType, irrigationType } = req.body;
 
-    const cropsList = cropsGrown
-      ? Array.isArray(cropsGrown)
-        ? cropsGrown
-        : cropsGrown.split(',').map((c) => c.trim()).filter(Boolean)
-      : undefined;
+    const resolvedName = farmName || name;
+    const resolvedSize = totalArea?.value || sizeAcres;
 
     if (isDBConnected()) {
-      let farm = await Farm.findById(id);
+      const farm = await Farm.findById(id);
       if (!farm) {
-        return res.status(404).json({ success: false, message: 'Farm not found' });
+        return res.status(404).json({ success: false, message: 'Farm profile not found' });
       }
 
       if (req.user.role !== 'admin' && farm.farmerId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ success: false, message: 'Unauthorized to modify this farm' });
+        return res.status(403).json({ success: false, message: 'Access denied' });
       }
 
-      farm.name = name || farm.name;
-      farm.location = location || farm.location;
-      if (sizeAcres) farm.sizeAcres = Number(sizeAcres);
+      if (resolvedName) farm.name = resolvedName;
+      if (location) {
+        farm.location = typeof location === 'string' ? location : `${location.village || ''}, ${location.district || ''}, ${location.state || ''}`;
+      }
+      if (resolvedSize) farm.sizeAcres = Number(resolvedSize);
       if (soilType) farm.soilType = soilType;
-      if (cropsList) farm.cropsGrown = cropsList;
       if (irrigationType) farm.irrigationType = irrigationType;
 
-      const updated = await farm.save();
-      return res.json({ success: true, message: 'Farm profile updated', data: updated });
+      await farm.save();
+      return res.json({ success: true, message: 'Farm updated', data: formatFarm(farm) });
     } else {
       const farm = mockStore.farms.find((f) => f._id.toString() === id.toString());
       if (!farm) {
-        return res.status(404).json({ success: false, message: 'Farm not found' });
+        return res.status(404).json({ success: false, message: 'Farm profile not found' });
       }
 
-      if (name) farm.name = name;
+      if (resolvedName) {
+        farm.name = resolvedName;
+        farm.farmName = resolvedName;
+      }
       if (location) farm.location = location;
-      if (sizeAcres) farm.sizeAcres = Number(sizeAcres);
+      if (resolvedSize) {
+        farm.sizeAcres = Number(resolvedSize);
+        farm.totalArea = { value: Number(resolvedSize), unit: 'Acres' };
+      }
       if (soilType) farm.soilType = soilType;
-      if (cropsList) farm.cropsGrown = cropsList;
       if (irrigationType) farm.irrigationType = irrigationType;
 
-      return res.json({ success: true, message: 'Farm profile updated', data: farm });
+      return res.json({ success: true, message: 'Farm updated', data: formatFarm(farm) });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

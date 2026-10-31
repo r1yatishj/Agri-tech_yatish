@@ -23,6 +23,7 @@ exports.getDashboardStats = async (req, res) => {
         totalFarms,
         totalCrops,
         totalOrders,
+        pendingOrders,
         activeAlerts,
         totalPosts,
         totalProducts,
@@ -33,6 +34,7 @@ exports.getDashboardStats = async (req, res) => {
         Farm.countDocuments(),
         Crop.countDocuments(),
         Order.countDocuments(),
+        Order.countDocuments({ status: { $in: ['Placed', 'Processing', 'Processing & Packed'] } }),
         WeatherAlert.countDocuments({ isActive: true }),
         ForumPost.countDocuments(),
         Product.countDocuments(),
@@ -50,6 +52,8 @@ exports.getDashboardStats = async (req, res) => {
           totalFarms,
           totalCrops,
           totalOrders,
+          pendingOrders,
+          pendingConsultations: (mockStore.consultations || []).filter(c => c.status !== 'Resolved').length,
           activeAlerts,
           totalPosts,
           totalProducts,
@@ -64,6 +68,8 @@ exports.getDashboardStats = async (req, res) => {
       const totalFarms = mockStore.farms.length;
       const totalCrops = mockStore.crops.length;
       const totalOrders = mockStore.orders.length;
+      const pendingOrders = mockStore.orders.filter((o) => ['Placed', 'Processing'].includes(o.status)).length;
+      const pendingConsultations = (mockStore.consultations || []).filter(c => c.status !== 'Resolved').length;
       const activeAlerts = mockStore.weatherAlerts.filter((a) => a.isActive !== false).length;
       const totalPosts = mockStore.forumPosts.length;
       const totalProducts = mockStore.products.length;
@@ -78,11 +84,13 @@ exports.getDashboardStats = async (req, res) => {
           totalFarms,
           totalCrops,
           totalOrders,
+          pendingOrders,
+          pendingConsultations,
           activeAlerts,
           totalPosts,
           totalProducts,
           totalRevenue,
-          systemHealth: 'Online & Standby Mode',
+          systemHealth: 'Online & Optimal (In-Memory Microclimate Active)',
         },
       });
     }
@@ -91,7 +99,64 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
-// @desc    Get all registered users
+// @desc    Broadcast pest or weather alert across network
+// @route   POST /api/admin/broadcast-alert
+// @access  Private / Admin
+exports.broadcastAlert = async (req, res) => {
+  try {
+    const { alert, district, state, pestName, riskLevel, affectedCrops, symptoms, preventionAdvice, recommendedTreatment } = req.body;
+
+    const data = alert || req.body;
+
+    const newPestAlert = {
+      alertActive: true,
+      riskLevel: data.riskLevel || 'High',
+      pestName: data.pestName || 'Urgent Agronomic Advisory',
+      scientificName: data.pestName || 'Pathogen Outbreak',
+      affectedCrops: Array.isArray(data.affectedCrops) ? data.affectedCrops : (data.affectedCrops || '').split(',').map(s => s.trim()).filter(Boolean),
+      symptoms: data.symptoms || 'Visual lesion patterns and wilting',
+      preventionAdvice: data.preventionAdvice || 'Immediate mitigation recommended',
+      recommendedTreatment: data.recommendedTreatment || {
+        organic: data.organicTreatment || 'Neem oil botanical spray 1500 ppm',
+        chemical: data.chemicalTreatment || 'Targeted agrochemical spray as advised'
+      }
+    };
+
+    mockStore.activePestAlert = newPestAlert;
+
+    const alertLog = {
+      _id: 'alert_' + Date.now(),
+      region: `${data.district || 'Northern Belt'}, ${data.state || 'Agricultural Network'}`,
+      temperature: 32,
+      humidity: 78,
+      windSpeed: 14,
+      pestRiskLevel: data.riskLevel || 'High',
+      advisoryMessage: data.symptoms || 'Agronomic alert broadcasted by Department Specialist',
+      identifiedThreat: data.pestName || 'Pest & Pathogen Surveillance',
+      recommendedAction: data.preventionAdvice || 'Implement protective measures immediately.',
+      affectedCrops: newPestAlert.affectedCrops,
+      severity: data.riskLevel === 'Severe' ? 'Critical' : 'Warning',
+      isActive: true,
+      createdAt: new Date(),
+    };
+
+    if (isDBConnected()) {
+      await WeatherAlert.create(alertLog);
+    } else {
+      mockStore.weatherAlerts.unshift(alertLog);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Agricultural alert broadcasted live across all farmer dashboards',
+      data: newPestAlert
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all users list
 // @route   GET /api/admin/users
 // @access  Private / Admin
 exports.getAllUsers = async (req, res) => {
@@ -100,7 +165,7 @@ exports.getAllUsers = async (req, res) => {
       const users = await User.find().select('-password').sort({ createdAt: -1 });
       return res.json({ success: true, count: users.length, data: users });
     } else {
-      const users = mockStore.users.map(({ passwordHash, ...rest }) => rest);
+      const users = mockStore.users.map(({ passwordHash, ...u }) => u);
       return res.json({ success: true, count: users.length, data: users });
     }
   } catch (error) {
@@ -108,7 +173,7 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
-// @desc    Update user role or status
+// @desc    Change user role (admin/farmer)
 // @route   PUT /api/admin/users/:id/role
 // @access  Private / Admin
 exports.updateUserRole = async (req, res) => {
@@ -117,11 +182,11 @@ exports.updateUserRole = async (req, res) => {
     const { role } = req.body;
 
     if (!['farmer', 'admin'].includes(role)) {
-      return res.status(400).json({ success: false, message: 'Invalid role' });
+      return res.status(400).json({ success: false, message: 'Role must be farmer or admin' });
     }
 
     if (isDBConnected()) {
-      const user = await User.findById(id);
+      const user = await User.findById(id).select('-password');
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
       user.role = role;
@@ -132,27 +197,31 @@ exports.updateUserRole = async (req, res) => {
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
       user.role = role;
-      const { passwordHash, ...rest } = user;
-      return res.json({ success: true, message: `Role updated to ${role}`, data: rest });
+      const { passwordHash, ...cleanUser } = user;
+      return res.json({ success: true, message: `Role updated to ${role}`, data: cleanUser });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Delete user account (Admin)
+// @desc    Delete user account
 // @route   DELETE /api/admin/users/:id
 // @access  Private / Admin
 exports.deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (id === req.user._id.toString()) {
+      return res.status(400).json({ success: false, message: 'Cannot delete your own admin account' });
+    }
+
     if (isDBConnected()) {
       await User.findByIdAndDelete(id);
-      return res.json({ success: true, message: 'User removed from system' });
+      return res.json({ success: true, message: 'User deleted' });
     } else {
       mockStore.users = mockStore.users.filter((u) => u._id.toString() !== id.toString());
-      return res.json({ success: true, message: 'User removed from system' });
+      return res.json({ success: true, message: 'User deleted' });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

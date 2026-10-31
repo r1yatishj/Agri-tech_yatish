@@ -5,6 +5,7 @@ const {
   getCropById,
   createCrop,
   updateCrop,
+  addActivity,
   updateSoilHealth,
   deleteCrop,
 } = require('../controllers/cropController');
@@ -21,6 +22,7 @@ router.route('/:id')
   .put(updateCrop)
   .delete(deleteCrop);
 
+router.post('/:id/activity', addActivity);
 router.put('/:id/soil-health', updateSoilHealth);
 
 module.exports = router;

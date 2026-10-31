@@ -28,7 +28,7 @@ exports.getPosts = async (req, res) => {
     } else {
       let posts = mockStore.forumPosts;
       if (category && category !== 'All') {
-        posts = posts.filter((p) => p.category === category);
+        posts = posts.filter((p) => p.category === category || p.category.includes(category) || category.includes(p.category));
       }
       if (search) {
         const s = search.toLowerCase();
@@ -45,7 +45,7 @@ exports.getPosts = async (req, res) => {
   }
 };
 
-// @desc    Get single forum post with answers
+// @desc    Get single forum post by ID
 // @route   GET /api/forum/:id
 // @access  Public / Private
 exports.getPostById = async (req, res) => {
@@ -87,7 +87,7 @@ exports.createPost = async (req, res) => {
         authorRole: req.user.role || 'farmer',
         title,
         content,
-        category: category || 'General Agriculture',
+        category: category || 'General Farming',
         upvotes: 0,
         upvotedBy: [],
         isResolved: false,
@@ -108,7 +108,7 @@ exports.createPost = async (req, res) => {
         authorRole: req.user.role || 'farmer',
         title,
         content,
-        category: category || 'General Agriculture',
+        category: category || 'General Farming',
         upvotes: 0,
         upvotedBy: [],
         isResolved: false,
@@ -130,24 +130,27 @@ exports.createPost = async (req, res) => {
 };
 
 // @desc    Add answer / expert reply to a question
-// @route   POST /api/forum/:id/responses
+// @route   POST /api/forum/:id/reply and POST /api/forum/:id/responses
 // @access  Private
 exports.addResponse = async (req, res) => {
   try {
     const { id } = req.params;
-    const { comment } = req.body;
+    const { comment, content, isExpertAnswer } = req.body;
 
-    if (!comment || !comment.trim()) {
-      return res.status(400).json({ success: false, message: 'Response comment cannot be empty' });
+    const replyText = content || comment;
+    if (!replyText || !replyText.trim()) {
+      return res.status(400).json({ success: false, message: 'Reply content cannot be empty' });
     }
 
-    const isExpert = req.user.role === 'admin';
+    const isExpert = isExpertAnswer || req.user.role === 'admin';
 
     const newResponse = {
+      _id: 'resp_' + Date.now(),
       authorId: req.user._id,
       authorName: req.user.name + (isExpert ? ' (Agronomist Expert)' : ''),
       authorRole: req.user.role,
-      comment,
+      comment: replyText,
+      content: replyText,
       isExpertAnswer: isExpert,
       upvotes: 0,
       createdAt: new Date(),
@@ -161,18 +164,18 @@ exports.addResponse = async (req, res) => {
       if (isExpert) {
         post.hasExpertResponse = true;
       }
-
       await post.save();
+
       return res.status(201).json({
         success: true,
-        message: 'Your reply has been submitted',
+        message: 'Reply posted to forum discussion',
         data: post,
       });
     } else {
       const post = mockStore.forumPosts.find((p) => p._id.toString() === id.toString());
       if (!post) return res.status(404).json({ success: false, message: 'Discussion post not found' });
 
-      newResponse._id = 'resp_' + Date.now();
+      if (!post.responses) post.responses = [];
       post.responses.push(newResponse);
       if (isExpert) {
         post.hasExpertResponse = true;
@@ -180,7 +183,7 @@ exports.addResponse = async (req, res) => {
 
       return res.status(201).json({
         success: true,
-        message: 'Your reply has been submitted',
+        message: 'Reply posted to forum discussion',
         data: post,
       });
     }
@@ -189,7 +192,7 @@ exports.addResponse = async (req, res) => {
   }
 };
 
-// @desc    Upvote a post
+// @desc    Upvote a forum post
 // @route   POST /api/forum/:id/upvote
 // @access  Private
 exports.upvotePost = async (req, res) => {
@@ -200,44 +203,30 @@ exports.upvotePost = async (req, res) => {
       const post = await ForumPost.findById(id);
       if (!post) return res.status(404).json({ success: false, message: 'Post not found' });
 
-      const hasUpvoted = post.upvotedBy.some(
-        (userId) => userId.toString() === req.user._id.toString()
-      );
-
-      if (hasUpvoted) {
-        post.upvotes = Math.max(0, post.upvotes - 1);
-        post.upvotedBy = post.upvotedBy.filter(
-          (userId) => userId.toString() !== req.user._id.toString()
-        );
-      } else {
-        post.upvotes += 1;
-        post.upvotedBy.push(req.user._id);
-      }
-
+      post.upvotes = (post.upvotes || 0) + 1;
       await post.save();
-      return res.json({ success: true, upvotes: post.upvotes });
+
+      return res.json({
+        success: true,
+        data: post,
+      });
     } else {
       const post = mockStore.forumPosts.find((p) => p._id.toString() === id.toString());
       if (!post) return res.status(404).json({ success: false, message: 'Post not found' });
 
-      const uid = req.user._id.toString();
-      const idx = post.upvotedBy.indexOf(uid);
-      if (idx !== -1) {
-        post.upvotes = Math.max(0, post.upvotes - 1);
-        post.upvotedBy.splice(idx, 1);
-      } else {
-        post.upvotes += 1;
-        post.upvotedBy.push(uid);
-      }
+      post.upvotes = (post.upvotes || 0) + 1;
 
-      return res.json({ success: true, upvotes: post.upvotes });
+      return res.json({
+        success: true,
+        data: post,
+      });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Delete / Moderate forum post (Admin or Author)
+// @desc    Delete post
 // @route   DELETE /api/forum/:id
 // @access  Private
 exports.deletePost = async (req, res) => {
@@ -249,21 +238,17 @@ exports.deletePost = async (req, res) => {
       if (!post) return res.status(404).json({ success: false, message: 'Post not found' });
 
       if (req.user.role !== 'admin' && post.authorId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ success: false, message: 'Unauthorized to delete this post' });
+        return res.status(403).json({ success: false, message: 'Not authorized to delete' });
       }
 
       await ForumPost.findByIdAndDelete(id);
-      return res.json({ success: true, message: 'Discussion post removed' });
+      return res.json({ success: true, message: 'Post deleted' });
     } else {
-      const post = mockStore.forumPosts.find((p) => p._id.toString() === id.toString());
-      if (!post) return res.status(404).json({ success: false, message: 'Post not found' });
+      const index = mockStore.forumPosts.findIndex((p) => p._id.toString() === id.toString());
+      if (index === -1) return res.status(404).json({ success: false, message: 'Post not found' });
 
-      if (req.user.role !== 'admin' && post.authorId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ success: false, message: 'Unauthorized to delete this post' });
-      }
-
-      mockStore.forumPosts = mockStore.forumPosts.filter((p) => p._id.toString() !== id.toString());
-      return res.json({ success: true, message: 'Discussion post removed' });
+      mockStore.forumPosts.splice(index, 1);
+      return res.json({ success: true, message: 'Post deleted' });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

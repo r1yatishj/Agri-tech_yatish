@@ -9,6 +9,7 @@ const {
 const { protect, adminOnly } = require('../middleware/auth');
 
 router.get('/', getWeather);
+router.get('/forecast', getWeather);
 router.get('/alerts', getAlerts);
 router.post('/alerts', protect, adminOnly, createAlert);
 router.delete('/alerts/:id', protect, adminOnly, deleteAlert);

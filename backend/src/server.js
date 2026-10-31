@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const { connectDB, getDBStatus } = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -13,6 +14,8 @@ const weatherRoutes = require('./routes/weatherRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const forumRoutes = require('./routes/forumRoutes');
+const consultationRoutes = require('./routes/consultationRoutes');
+const soilRoutes = require('./routes/soilRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
@@ -49,15 +52,23 @@ app.use('/api/farms', farmRoutes);
 app.use('/api/crops', cropRoutes);
 app.use('/api/weather', weatherRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/resources', productRoutes); // Alias used by Marketplace catalog
 app.use('/api/orders', orderRoutes);
 app.use('/api/forum', forumRoutes);
+app.use('/api/consultations', consultationRoutes);
+app.use('/api/soil', soilRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Integrated Frontend & Backend Static Serving (Single Unified Link)
-const fs = require('fs');
-const frontendBuildPath = path.resolve(__dirname, '../../frontend/dist');
+const distCandidates = [
+  path.resolve(__dirname, '../../dist'),           // agritech-client/dist
+  path.resolve(__dirname, '../../frontend/dist'),  // monorepo frontend/dist
+  path.resolve(__dirname, '../dist')
+];
 
-if (fs.existsSync(frontendBuildPath)) {
+const frontendBuildPath = distCandidates.find((dir) => fs.existsSync(dir));
+
+if (frontendBuildPath) {
   console.log(`[Unified Full-Stack] Serving integrated React frontend from ${frontendBuildPath}`);
   app.use(express.static(frontendBuildPath));
 
@@ -76,8 +87,11 @@ if (fs.existsSync(frontendBuildPath)) {
         crops: '/api/crops',
         weather: '/api/weather',
         products: '/api/products',
+        resources: '/api/resources',
         orders: '/api/orders',
         forum: '/api/forum',
+        consultations: '/api/consultations',
+        soil: '/api/soil',
         admin: '/api/admin',
       },
     });
